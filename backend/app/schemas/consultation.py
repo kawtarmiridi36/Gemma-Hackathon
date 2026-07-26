@@ -1,16 +1,21 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import Literal
 
 
 class TranscriptMessage(BaseModel):
-    role: str  # "infirmier" | "assistant"
+    role: str
     content: str
-    type: str = "text"  # "voice" | "text"
+    type: str = "text"
     timestamp: str | None = None
 
 
 class ConsultationCreate(BaseModel):
     dossier_id: int
+
+
+class TextMessageBody(BaseModel):
+    content: str = Field(..., min_length=1, max_length=5000)
 
 
 class ConsultationOut(BaseModel):
@@ -56,7 +61,7 @@ class FinalizeResponse(BaseModel):
 
 
 class ValidationAction(BaseModel):
-    action: str  # "validated" | "modified" | "rejected"
+    action: Literal["validated", "modified", "rejected"]
     notes: str | None = None
     modified_ordonnance: list | None = None
     modified_compte_rendu: str | None = None

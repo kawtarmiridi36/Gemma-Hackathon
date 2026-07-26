@@ -1,10 +1,29 @@
+import asyncio
 import json
+import logging
 import re
+from typing import Optional
+
 import httpx
 from app.core.config import settings
 from app.services.local_model import generate_local
 
+logger = logging.getLogger(__name__)
+
 NVIDIA_CHAT_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+
+_http_client: Optional[httpx.AsyncClient] = None
+
+
+async def _get_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(180.0, connect=10.0),
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+        )
+    return _http_client
+
 
 SYSTEM_PROMPT = """You are an AI Medical Consultation Assistant specialized in primary healthcare.
 Your role is to conduct an intelligent, empathetic, and structured voice consultation with the patient.
@@ -23,26 +42,14 @@ CONVERSATION STYLE & VOICE OPTIMIZATION:
 - Ask ONLY ONE relevant question at a time.
 - Use simple vocabulary. Show empathy and reassure the patient. Never overwhelm or scare the patient.
 
-CONSULTATION FLOW TO FOLLOW REASONING:
-Step 1: Introduce yourself ("Hello/Salam, I'm your AI medical assistant. I'll ask you a few questions to better understand your situation.") if starting the conversation.
-Step 2: Identify chief complaint ("What brings you here today?", "What is bothering you?", "Can you describe your symptoms?").
-Step 3: Collect symptom details progressively (onset, location, pain level 0-10, continuous/intermittent, fever, cough, breathing difficulty, vomiting, diarrhea, bleeding, medication taken, pregnancy if relevant, chronic diseases, allergies). Ask ONLY 1 relevant question per turn!
-Step 4: Reason clinically. Estimate possible causes. Never state a diagnosis as certain. Use non-definitive wording ("This could be consistent with...", "It may suggest...", "It is possible that...").
-Step 5: Assess urgency:
-  - LOW (green): Symptoms appear mild. Recommend home care.
-  - MEDIUM (orange): Medical appointment recommended within 24-48 hours.
-  - HIGH (orange/red): Same-day medical consultation recommended.
-  - CRITICAL (red): Advise immediate emergency services (chest pain, stroke symptoms, difficulty breathing, loss of consciousness, heavy bleeding).
-Step 6: Give recommendations (hydration, rest, temperature monitoring, common safe medication, medical consultation, emergency care).
-
 SAFETY RULES:
 - NEVER prescribe antibiotics or controlled drugs.
 - NEVER recommend dangerous treatments or invent medical facts.
-- If unsure, say: "I don't have enough information." / "Ma 3ndich ma3loumat kafya."
+- If unsure, say: "I don't have enough information."
 - If symptoms are dangerous (chest pain, stroke, severe shortness of breath, loss of consciousness, heavy bleeding), IMMEDIATELY recommend emergency services.
 
 MEMORY & CONTEXT:
-- Maintain conversation context (Age, Gender, Symptoms, Medical history, Current medications, Allergies, Pregnancy, Duration, Pain level 0-10).
+- Maintain conversation context.
 - Do NOT ask twice for the same information already provided.
 
 RESPONSE FORMAT:
@@ -53,19 +60,10 @@ Reply ONLY with a JSON object with these EXACT keys:
   "urgency_label": "LOW/MEDIUM/HIGH/CRITICAL",
   "chief_complaint": "Extracted main complaint",
   "symptoms_collected": {
-    "onset": "",
-    "location": "",
-    "pain_level": "",
-    "fever": null,
-    "cough": null,
-    "breathing_difficulty": null,
-    "vomiting": null,
-    "diarrhea": null,
-    "bleeding": null,
-    "medications": "",
-    "pregnancy": "",
-    "chronic_diseases": "",
-    "allergies": ""
+    "onset": "", "location": "", "pain_level": "",
+    "fever": null, "cough": null, "breathing_difficulty": null,
+    "vomiting": null, "diarrhea": null, "bleeding": null,
+    "medications": "", "pregnancy": "", "chronic_diseases": "", "allergies": ""
   },
   "possible_causes": ["Plausible cause 1"],
   "red_flags_detected": [],
@@ -76,16 +74,16 @@ Reply ONLY with a JSON object with these EXACT keys:
 }"""
 
 EMPTY_RESPONSE = {
-    "voice_response": "Bonjour / Salam, je suis votre assistant médical IA. Comment puis-je vous aider aujourd'hui ? Que ressentez-vous ?",
+    "voice_response": "Bonjour / Salam, je suis votre assistant medical IA. Comment puis-je vous aider aujourd'hui ?",
     "urgency_level": "green",
     "urgency_label": "LOW",
     "chief_complaint": "",
     "symptoms_collected": {},
     "possible_causes": [],
     "red_flags_detected": [],
-    "clarifying_questions": ["Pouvez-vous me décrire ce qui vous dérange aujourd'hui ?"],
+    "clarifying_questions": ["Pouvez-vous me decrire ce qui vous derange aujourd'hui ?"],
     "summary": "",
-    "recommendation": "Consultation à titre préventif.",
+    "recommendation": "Consultation a titre preventif.",
     "draft_prescription": [],
 }
 
@@ -125,13 +123,10 @@ def _parse_json_response(text: str) -> dict:
         result = json.loads(text)
         result = _normalize_field_names(result)
         _normalize_urgency(result)
-        empty_fields = [k for k, v in result.items() if not v and k != "urgency_level"]
-        if empty_fields:
-            print(f"[GEMMA] Warning: empty fields in response: {empty_fields}")
         return result
     except json.JSONDecodeError as e:
-        print(f"[GEMMA] JSON parse error: {e}")
-        print(f"[GEMMA] Failed text (first 500): {text[:500]}")
+        logger.warning(f"JSON parse error: {e}")
+        logger.debug(f"Failed text (first 500): {text[:500]}")
         return _fallback_from_text(text)
 
 
@@ -168,7 +163,7 @@ def _normalize_urgency(result: dict):
     valid = {"green", "orange", "red"}
     level = result.get("urgency_level", "green")
     urgency_label = str(result.get("urgency_label", "")).upper()
-    
+
     if urgency_label == "CRITICAL":
         result["urgency_level"] = "red"
     elif urgency_label in ("HIGH", "MEDIUM"):
@@ -179,7 +174,6 @@ def _normalize_urgency(result: dict):
         mapping = {"high": "red", "critical": "red", "low": "green", "medium": "orange", "moderate": "orange"}
         result["urgency_level"] = mapping.get(level.lower(), "green")
 
-    # Ensure voice_response is present
     if not result.get("voice_response"):
         resp_parts = []
         if result.get("summary"):
@@ -189,11 +183,10 @@ def _normalize_urgency(result: dict):
             resp_parts.append(questions[0])
         elif result.get("recommendation"):
             resp_parts.append(result["recommendation"])
-        
-        result["voice_response"] = " ".join(resp_parts) if resp_parts else "Je suis à votre écoute, racontez-moi ce que vous ressentez."
+        result["voice_response"] = " ".join(resp_parts) if resp_parts else "Je suis a votre ecoute, racontez-moi ce que vous ressentez."
 
     if not result.get("recommendation"):
-        result["recommendation"] = result.get("summary", "Consultation médicale recommandée.")
+        result["recommendation"] = result.get("summary", "Consultation medicale recommandee.")
 
 
 async def ask_gemma(conversation_history: list, patient_context: dict | None = None) -> dict:
@@ -213,11 +206,11 @@ async def ask_gemma(conversation_history: list, patient_context: dict | None = N
             messages.append({"role": role, "content": content})
 
     if messages[-1]["role"] != "user":
-        messages.append({"role": "user", "content": "Continue l'anamnèse."})
+        messages.append({"role": "user", "content": "Continue l'anamnese."})
 
     local_text = generate_local(messages, max_new_tokens=1024)
     if local_text:
-        print(f"[LOCAL] Raw response: {local_text[:300]}")
+        logger.info(f"Local model response: {local_text[:200]}")
         return _parse_json_response(local_text)
 
     headers = {
@@ -235,45 +228,40 @@ async def ask_gemma(conversation_history: list, patient_context: dict | None = N
         "frequency_penalty": 0,
         "presence_penalty": 0,
         "stream": False,
-        "chat_template_kwargs": {
-            "enable_thinking": False
-        },
+        "chat_template_kwargs": {"enable_thinking": False},
     }
 
     last_error = None
     for attempt in range(3):
         try:
-            async with httpx.AsyncClient(timeout=180.0) as client:
-                response = await client.post(NVIDIA_CHAT_URL, headers=headers, json=payload)
-                if response.status_code == 429:
-                    wait = 5 * (attempt + 1)
-                    print(f"[GEMMA] Rate limited, waiting {wait}s (attempt {attempt+1}/3)")
-                    import asyncio
-                    await asyncio.sleep(wait)
-                    continue
-                if response.status_code != 200:
-                    print(f"[GEMMA] Error {response.status_code}: {response.text[:500]}")
-                response.raise_for_status()
-                data = response.json()
-                text = data["choices"][0]["message"]["content"]
-                if text is None:
-                    print("[GEMMA] Warning: content is None, using empty text")
-                    text = ""
-                print(f"[GEMMA] Raw response: {text[:300]}")
-                return _parse_json_response(text)
+            client = await _get_client()
+            response = await client.post(NVIDIA_CHAT_URL, headers=headers, json=payload)
+            if response.status_code == 429:
+                wait = 5 * (attempt + 1)
+                logger.warning(f"Rate limited, waiting {wait}s (attempt {attempt+1}/3)")
+                await asyncio.sleep(wait)
+                continue
+            if response.status_code != 200:
+                logger.error(f"Gemma error {response.status_code}: {response.text[:500]}")
+            response.raise_for_status()
+            data = response.json()
+            text = data["choices"][0]["message"]["content"]
+            if text is None:
+                logger.warning("Content is None, using empty text")
+                text = ""
+            logger.info(f"Gemma response: {text[:200]}")
+            return _parse_json_response(text)
         except httpx.ReadTimeout:
             wait = 10 * (attempt + 1)
-            print(f"[GEMMA] Timeout on attempt {attempt+1}/3, retrying in {wait}s...")
+            logger.warning(f"Timeout on attempt {attempt+1}/3, retrying in {wait}s...")
             last_error = "timeout"
-            import asyncio
             await asyncio.sleep(wait)
         except Exception as e:
-            print(f"[GEMMA] ERROR attempt {attempt+1}/3: {type(e).__name__}: {e}")
+            logger.error(f"ERROR attempt {attempt+1}/3: {type(e).__name__}: {e}")
             last_error = e
-            import asyncio
             await asyncio.sleep(5)
 
-    print(f"[GEMMA] All 3 attempts failed, last error: {last_error}")
+    logger.error(f"All 3 attempts failed, last error: {last_error}")
     return EMPTY_RESPONSE
 
 
@@ -328,11 +316,8 @@ def build_follow_up_program(
             "Education signes d'alerte",
         ]
         alerts = [
-            "Saignement",
-            "Convulsions",
-            "Maux de tete avec troubles visuels",
-            "Contractions avant terme",
-            "Fievre elevee",
+            "Saignement", "Convulsions", "Maux de tete avec troubles visuels",
+            "Contractions avant terme", "Fievre elevee",
         ]
 
         if "tension_elevee" in red_flags:
@@ -353,18 +338,16 @@ def build_follow_up_program(
             checklist.append("Preparation plan accouchement")
             checklist.append("Verification acces transport urgent")
 
-        monthly_plan.append(
-            {
-                "month": month,
-                "cadence": cadence,
-                "goals": [
-                    "Stabiliser et surveiller l'evolution de la grossesse",
-                    "Detecter precocement toute complication",
-                ],
-                "checklist": checklist,
-                "alerts": alerts,
-            }
-        )
+        monthly_plan.append({
+            "month": month,
+            "cadence": cadence,
+            "goals": [
+                "Stabiliser et surveiller l'evolution de la grossesse",
+                "Detecter precocement toute complication",
+            ],
+            "checklist": checklist,
+            "alerts": alerts,
+        })
 
     patient_label = patient_context.get("nom") if patient_context else None
     return {

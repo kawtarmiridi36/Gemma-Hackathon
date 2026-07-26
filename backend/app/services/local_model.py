@@ -1,10 +1,14 @@
-import json
-import os
+import logging
+import threading
 from pathlib import Path
+
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 _local_model = None
 _local_tokenizer = None
+_loading_lock = threading.Lock()
 _model_loading = False
 
 LOCAL_MODEL_PATH = Path(__file__).parent.parent.parent / "models" / "darija-medical"
@@ -15,19 +19,23 @@ def _load_local_model():
 
     if _local_model is not None:
         return True
-    if _model_loading:
-        return False
-    if not settings.USE_LOCAL_MODEL:
-        return False
 
-    if not LOCAL_MODEL_PATH.exists():
-        print(f"[LOCAL] Model not found at {LOCAL_MODEL_PATH}")
-        return False
+    with _loading_lock:
+        if _local_model is not None:
+            return True
+        if _model_loading:
+            return False
+        if not settings.USE_LOCAL_MODEL:
+            return False
+
+        if not LOCAL_MODEL_PATH.exists():
+            logger.warning(f"Model not found at {LOCAL_MODEL_PATH}")
+            return False
+
+        _model_loading = True
 
     try:
-        _model_loading = True
-        print("[LOCAL] Loading darija medical model...")
-
+        logger.info("Loading darija medical model...")
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -48,16 +56,19 @@ def _load_local_model():
         )
         _local_model.eval()
 
-        print(f"[LOCAL] Model loaded on {device}")
+        with _loading_lock:
+            _model_loading = False
+
+        logger.info(f"Model loaded on {device}")
         return True
 
     except Exception as e:
-        print(f"[LOCAL] Failed to load model: {e}")
-        _local_model = None
-        _local_tokenizer = None
+        logger.error(f"Failed to load model: {e}")
+        with _loading_lock:
+            _local_model = None
+            _local_tokenizer = None
+            _model_loading = False
         return False
-    finally:
-        _model_loading = False
 
 
 def generate_local(messages: list, max_new_tokens: int = 1024) -> str | None:
@@ -87,5 +98,5 @@ def generate_local(messages: list, max_new_tokens: int = 1024) -> str | None:
         return response
 
     except Exception as e:
-        print(f"[LOCAL] Generation error: {e}")
+        logger.error(f"Generation error: {e}")
         return None

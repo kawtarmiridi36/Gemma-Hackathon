@@ -1,24 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.models import Patient, DossierMedical, Consultation, User
 from app.schemas.patient import PatientCreate, PatientOut, PatientFullOut, DossierOut
-from app.core.security import decode_token
+from app.core.deps import get_current_user
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/patients", tags=["patients"])
 
 
-def get_current_user(token: str | None = None, db: Session = None) -> User | None:
-    if not token:
-        return None
-    payload = decode_token(token)
-    if not payload:
-        return None
-    return db.query(User).filter(User.id == int(payload["sub"])).first()
-
-
-@router.post("", response_model=PatientOut)
-def create_patient(data: PatientCreate, db: Session = Depends(get_db)):
+@router.post("", response_model=PatientOut, status_code=status.HTTP_201_CREATED)
+def create_patient(
+    data: PatientCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     patient = Patient(
         nom=data.nom,
         age=data.age,
@@ -33,33 +30,49 @@ def create_patient(data: PatientCreate, db: Session = Depends(get_db)):
     db.add(dossier)
     db.commit()
     db.refresh(patient)
+    logger.info(f"Patient created: {patient.nom} (id={patient.id}) by user {current_user.id}")
     return PatientOut.model_validate(patient)
 
 
 @router.get("", response_model=list[PatientOut])
-def list_patients(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
+def list_patients(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     patients = db.query(Patient).offset(skip).limit(limit).all()
     return [PatientOut.model_validate(p) for p in patients]
 
 
 @router.get("/{patient_id}", response_model=PatientFullOut)
-def get_patient(patient_id: int, db: Session = Depends(get_db)):
+def get_patient(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
-        raise HTTPException(404, "Patient non trouvé")
-    return PatientFullOut(patient=PatientOut.model_validate(patient),
-                         dossier=DossierOut.model_validate(patient.dossier) if patient.dossier else None)
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Patient non trouvé")
+    return PatientFullOut(
+        patient=PatientOut.model_validate(patient),
+        dossier=DossierOut.model_validate(patient.dossier) if patient.dossier else None,
+    )
 
 
 @router.get("/{patient_id}/suivi")
-def get_patient_suivi(patient_id: int, db: Session = Depends(get_db)):
+def get_patient_suivi(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
-        raise HTTPException(404, "Patient non trouvé")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Patient non trouvé")
 
     dossier = patient.dossier
     if not dossier:
-        raise HTTPException(404, "Dossier non trouvé")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Dossier non trouvé")
 
     consultations = (
         db.query(Consultation)

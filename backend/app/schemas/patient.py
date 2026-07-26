@@ -1,13 +1,13 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PatientCreate(BaseModel):
-    nom: str
-    age: int
-    sexe: str = "F"
-    zone: str | None = None
-    village: str | None = None
+    nom: str = Field(..., min_length=1, max_length=255)
+    age: int = Field(..., ge=0, le=120)
+    sexe: str = Field("F", pattern=r"^[FM]$")
+    zone: str | None = Field(None, max_length=255)
+    village: str | None = Field(None, max_length=255)
     antecedents: str | None = None
 
 

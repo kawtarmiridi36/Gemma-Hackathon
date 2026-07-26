@@ -1,0 +1,50 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dar-al-oumouma-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./app/dar_al_oumouma.db}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      - GEMMA_MODEL=${GEMMA_MODEL:-google/gemma-4-31b-it}
+      - VISTA3D_MODEL=${VISTA3D_MODEL:-nvidia/vista-3d}
+      - WHISPER_MODEL=${WHISPER_MODEL:-medium}
+      - USE_LOCAL_MODEL=${USE_LOCAL_MODEL:-false}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
+      - ELEVENLABS_VOICE_ID=${ELEVENLABS_VOICE_ID:-}
+    volumes:
+      - backend_uploads:/app/app/uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/api/health').raise_for_status()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - dar-al-oumouma
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: dar-al-oumouma-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - dar-al-oumouma
+
+volumes:
+  backend_uploads:
+    driver: local
+
+networks:
+  dar-al-oumouma:
+    driver: bridge
