@@ -1,0 +1,141 @@
+{
+  "model_type": "GradientBoostingClassifier",
+  "n_estimators": 200,
+  "max_depth": 5,
+  "accuracy": 0.8762805854736261,
+  "features": [
+    "baseline value",
+    "accelerations",
+    "fetal_movement",
+    "uterine_contractions",
+    "light_decelerations",
+    "severe_decelerations",
+    "prolongued_decelerations",
+    "abnormal_short_term_variability",
+    "mean_value_of_short_term_variability",
+    "percentage_of_time_with_abnormal_long_term_variability",
+    "mean_value_of_long_term_variability",
+    "histogram_width",
+    "histogram_min",
+    "histogram_max",
+    "histogram_number_of_peaks",
+    "histogram_number_of_zeroes",
+    "histogram_mode",
+    "histogram_mean",
+    "histogram_median",
+    "histogram_variance",
+    "histogram_tendency"
+  ],
+  "classes": {
+    "1": "Normal",
+    "2": "Suspect",
+    "3": "Pathological"
+  },
+  "feature_ranges": {
+    "baseline value": {
+      "min": 106.0,
+      "max": 160.0,
+      "mean": 133.3038570084666
+    },
+    "accelerations": {
+      "min": 0.0,
+      "max": 0.019,
+      "mean": 0.00317826904985889
+    },
+    "fetal_movement": {
+      "min": 0.0,
+      "max": 0.481,
+      "mean": 0.00948071495766698
+    },
+    "uterine_contractions": {
+      "min": 0.0,
+      "max": 0.015,
+      "mean": 0.004366415804327376
+    },
+    "light_decelerations": {
+      "min": 0.0,
+      "max": 0.015,
+      "mean": 0.001889463781749765
+    },
+    "severe_decelerations": {
+      "min": 0.0,
+      "max": 0.001,
+      "mean": 3.292568203198495e-06
+    },
+    "prolongued_decelerations": {
+      "min": 0.0,
+      "max": 0.005,
+      "mean": 0.00015851364063969897
+    },
+    "abnormal_short_term_variability": {
+      "min": 12.0,
+      "max": 87.0,
+      "mean": 46.99012229539041
+    },
+    "mean_value_of_short_term_variability": {
+      "min": 0.2,
+      "max": 7.0,
+      "mean": 1.3327845719661335
+    },
+    "percentage_of_time_with_abnormal_long_term_variability": {
+      "min": 0.0,
+      "max": 91.0,
+      "mean": 9.846660395108184
+    },
+    "mean_value_of_long_term_variability": {
+      "min": 0.0,
+      "max": 50.7,
+      "mean": 8.187629350893696
+    },
+    "histogram_width": {
+      "min": 3.0,
+      "max": 180.0,
+      "mean": 70.44590780809031
+    },
+    "histogram_min": {
+      "min": 50.0,
+      "max": 159.0,
+      "mean": 93.57949200376294
+    },
+    "histogram_max": {
+      "min": 122.0,
+      "max": 238.0,
+      "mean": 164.02539981185325
+    },
+    "histogram_number_of_peaks": {
+      "min": 0.0,
+      "max": 18.0,
+      "mean": 4.068203198494826
+    },
+    "histogram_number_of_zeroes": {
+      "min": 0.0,
+      "max": 10.0,
+      "mean": 0.3236124176857949
+    },
+    "histogram_mode": {
+      "min": 60.0,
+      "max": 187.0,
+      "mean": 137.45202257761053
+    },
+    "histogram_mean": {
+      "min": 73.0,
+      "max": 182.0,
+      "mean": 134.61053621825025
+    },
+    "histogram_median": {
+      "min": 77.0,
+      "max": 186.0,
+      "mean": 138.09031044214487
+    },
+    "histogram_variance": {
+      "min": 0.0,
+      "max": 269.0,
+      "mean": 18.808090310442147
+    },
+    "histogram_tendency": {
+      "min": -1.0,
+      "max": 1.0,
+      "mean": 0.32031984948259645
+    }
+  }
+}
