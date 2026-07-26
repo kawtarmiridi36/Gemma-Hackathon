@@ -1,13 +1,14 @@
 from datetime import datetime
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
+from typing import Literal
 
 
 class UserCreate(BaseModel):
-    nom: str
+    nom: str = Field(..., min_length=1, max_length=255)
     email: EmailStr
-    password: str
-    role: str  # "infirmier" | "medecin"
-    centre: str | None = None
+    password: str = Field(..., min_length=8, max_length=128)
+    role: Literal["infirmier", "medecin"]
+    centre: str | None = Field(None, max_length=255)
 
 
 class UserLogin(BaseModel):
@@ -27,4 +28,5 @@ class UserOut(BaseModel):
 
 class Token(BaseModel):
     access_token: str
+    token_type: str = "bearer"
     user: UserOut

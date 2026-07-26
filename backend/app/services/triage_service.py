@@ -1,7 +1,10 @@
-import joblib
 import json
-import os
+import logging
 from pathlib import Path
+
+import joblib
+
+logger = logging.getLogger(__name__)
 
 ML_DIR = Path(__file__).parent.parent / "ml"
 
@@ -16,10 +19,12 @@ def _load_model():
     model_path = ML_DIR / "fetal_health_model.pkl"
     info_path = ML_DIR / "model_info.json"
     if not model_path.exists():
+        logger.warning(f"ML model not found at {model_path}")
         return
     _model = joblib.load(model_path)
     with open(info_path) as f:
         _model_info = json.load(f)
+    logger.info("CTG ML model loaded successfully.")
 
 
 CLASS_LABELS = {1: "Normal", 2: "Suspect", 3: "Pathological"}
@@ -117,7 +122,10 @@ RED_FLAGS_PREGNANCY = {
     "convulsions": ["convulsion", "ta9adoum", "seizure"],
     "tension_elevee": ["tension", "dghet", "pression", "hypertension"],
     "douleur_thoracique": ["sdar", "douleur thoracique", "chest pain", "wja3 f sdar"],
-    "difficulte_respiratoire": ["ma kay9darch ytnfs", "difficulte a respirer", "shortness of breath", "dikka", "essoufflement"],
+    "difficulte_respiratoire": [
+        "ma kay9darch ytnfs", "difficulte a respirer",
+        "shortness of breath", "dikka", "essoufflement",
+    ],
     "perte_connaissance": ["ghaybo", "syncope", "perte de connaissance", "unconscious"],
     "accident_vasculaire": ["flaj", "paralysie", "stroke", "paralisis"],
 }

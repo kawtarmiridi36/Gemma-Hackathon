@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, Outlet } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Button, Card, CardContent, Tooltip } from '@heroui/react'
@@ -20,10 +20,20 @@ const ICONS = {
 
 function App() {
   const [user, setUser] = useState(null)
+  const [authChecked, setAuthChecked] = useState(false)
 
   useEffect(() => {
     const saved = localStorage.getItem('user')
-    if (saved) setUser(JSON.parse(saved))
+    const token = localStorage.getItem('token')
+    if (saved && token) {
+      try {
+        setUser(JSON.parse(saved))
+      } catch {
+        localStorage.removeItem('user')
+        localStorage.removeItem('token')
+      }
+    }
+    setAuthChecked(true)
   }, [])
 
   const handleLogin = (userData, token) => {
@@ -38,63 +48,68 @@ function App() {
     setUser(null)
   }
 
+  if (!authChecked) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#FAFDFB]">
+        <div className="text-sm text-slate-500">Chargement...</div>
+      </div>
+    )
+  }
+
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Landing Page */}
         <Route path="/" element={<LandingPage />} />
 
-        {/* Public Login Page */}
-        <Route 
-          path="/login" 
+        <Route
+          path="/login"
           element={
             user ? (
               <Navigate to={user.role === 'infirmier' ? '/nurse/dossiers' : '/doctor/queue'} replace />
             ) : (
               <LoginPage onLogin={handleLogin} />
             )
-          } 
+          }
         />
 
-        {/* Protected Nurse Routes */}
-        <Route 
-          path="/nurse/*" 
+        <Route
+          path="/nurse"
           element={
             user && user.role === 'infirmier' ? (
               <DashboardLayout user={user} onLogout={handleLogout}>
-                <Routes>
-                  <Route path="dossiers" element={<DossierList />} />
-                  <Route path="new" element={<NewDossier />} />
-                  <Route path="consultation/:id" element={<Consultation />} />
-                  <Route path="suivi/:id" element={<SuiviPatient />} />
-                  <Route path="*" element={<Navigate to="dossiers" replace />} />
-                </Routes>
+                <Outlet />
               </DashboardLayout>
             ) : (
               <Navigate to="/login" replace />
             )
-          } 
-        />
+          }
+        >
+          <Route index element={<Navigate to="dossiers" replace />} />
+          <Route path="dossiers" element={<DossierList />} />
+          <Route path="new" element={<NewDossier />} />
+          <Route path="consultation/:id" element={<Consultation />} />
+          <Route path="suivi/:id" element={<SuiviPatient />} />
+          <Route path="*" element={<Navigate to="dossiers" replace />} />
+        </Route>
 
-        {/* Protected Doctor Routes */}
-        <Route 
-          path="/doctor/*" 
+        <Route
+          path="/doctor"
           element={
             user && user.role === 'medecin' ? (
               <DashboardLayout user={user} onLogout={handleLogout}>
-                <Routes>
-                  <Route path="queue" element={<ValidationQueue />} />
-                  <Route path="review/:id" element={<ConsultationReview />} />
-                  <Route path="*" element={<Navigate to="queue" replace />} />
-                </Routes>
+                <Outlet />
               </DashboardLayout>
             ) : (
               <Navigate to="/login" replace />
             )
-          } 
-        />
+          }
+        >
+          <Route index element={<Navigate to="queue" replace />} />
+          <Route path="queue" element={<ValidationQueue />} />
+          <Route path="review/:id" element={<ConsultationReview />} />
+          <Route path="*" element={<Navigate to="queue" replace />} />
+        </Route>
 
-        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
@@ -114,10 +129,10 @@ function DashboardLayout({ user, onLogout, children }) {
 
 function Sidebar({ user, onLogout }) {
   const location = useLocation()
-  const isActive = (path) => location.pathname === path 
-    ? 'flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-bold text-xs bg-[#0F172A] text-white shadow-sm transition-all' 
+  const isActive = (path) => location.pathname === path
+    ? 'flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-bold text-xs bg-[#0F172A] text-white shadow-sm transition-all'
     : 'flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium text-xs text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all'
-  
+
   const initials = user?.nom ? user.nom.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : 'D'
 
   return (
@@ -189,11 +204,11 @@ function Sidebar({ user, onLogout }) {
             </div>
           </div>
           <Tooltip content="Déconnexion" placement="top">
-            <Button 
-              isIconOnly 
-              size="sm" 
-              variant="light" 
-              onPress={onLogout} 
+            <Button
+              isIconOnly
+              size="sm"
+              variant="light"
+              onPress={onLogout}
               className="text-slate-400 hover:text-red-600 transition-colors"
             >
               {ICONS.logout}
@@ -287,7 +302,7 @@ function LoginPage({ onLogin }) {
       {/* Right Pane - Enterprise Sign In Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-[#FAFDFB]">
         <div className="w-full max-w-md">
-          
+
           <div className="text-left mb-8">
             <Link to="/" className="inline-flex items-center gap-2 text-xs font-semibold text-[#059669] hover:underline mb-6">
               ← Retour à l'accueil

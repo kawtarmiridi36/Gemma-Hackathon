@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, ForeignKey, JSON
+    Column, Integer, String, Text, DateTime, ForeignKey, JSON, Index
 )
 from sqlalchemy.orm import relationship
 from app.db.session import Base
@@ -13,11 +13,13 @@ class User(Base):
     nom = Column(String(255), nullable=False)
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
-    role = Column(String(20), nullable=False)  # "infirmier" | "medecin"
+    role = Column(String(20), nullable=False)
     centre = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
-    consultations = relationship("Consultation", foreign_keys="[Consultation.infirmier_id]", back_populates="infirmier")
+    consultations = relationship(
+        "Consultation", foreign_keys="[Consultation.infirmier_id]", back_populates="infirmier"
+    )
 
 
 class Patient(Base):
@@ -26,7 +28,7 @@ class Patient(Base):
     id = Column(Integer, primary_key=True, index=True)
     nom = Column(String(255), nullable=False)
     age = Column(Integer, nullable=False)
-    sexe = Column(String(1), nullable=False, default="F")  # "F" | "M"
+    sexe = Column(String(1), nullable=False, default="F")
     zone = Column(String(255), nullable=True)
     village = Column(String(255), nullable=True)
     antecedents = Column(Text, nullable=True)
@@ -48,6 +50,13 @@ class DossierMedical(Base):
 
 class Consultation(Base):
     __tablename__ = "consultations"
+    __table_args__ = (
+        Index("ix_consultations_dossier_id", "dossier_id"),
+        Index("ix_consultations_infirmier_id", "infirmier_id"),
+        Index("ix_consultations_status", "status"),
+        Index("ix_consultations_urgency", "urgency_level"),
+        Index("ix_consultations_date", "date"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     dossier_id = Column(Integer, ForeignKey("dossiers_medicaux.id"), nullable=False)
@@ -56,12 +65,12 @@ class Consultation(Base):
     transcript = Column(JSON, default=list)
     compte_rendu = Column(Text, nullable=True)
     ordonnance = Column(JSON, default=list)
-    urgency_level = Column(String(10), default="green")  # "green" | "orange" | "red"
+    urgency_level = Column(String(10), default="green")
     red_flags = Column(JSON, default=list)
     imaging_files = Column(JSON, default=list)
     imaging_analysis = Column(Text, nullable=True)
     follow_up_program = Column(JSON, nullable=True)
-    status = Column(String(20), default="pending")  # "pending" | "validated" | "modified" | "rejected"
+    status = Column(String(20), default="pending")
     validated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     validated_at = Column(DateTime, nullable=True)
     validation_notes = Column(Text, nullable=True)

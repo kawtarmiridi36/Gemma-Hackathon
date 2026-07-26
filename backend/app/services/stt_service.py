@@ -1,26 +1,31 @@
-from faster_whisper import WhisperModel
-import threading
+import logging
+import os
 import re
+import threading
+
+from faster_whisper import WhisperModel
+
+logger = logging.getLogger(__name__)
 
 _model = None
 _lock = threading.Lock()
 
-# Prompt d'orientation en دارجة مغربية بالخط العربي
 DARIJA_PROMPT = (
-    "تأكد من كتابة النص بالدارجة المغربية وبالأحرف العربية: "
-    "السلام عليكم، سميتي هشام، المريضة ديالي حاملة في الشهر الرابع، عندي الحريق، السخانة، الطنسيون، وجع الرأس، السعلة، الحريق في الكرش."
+    "aakid mn ktaba n-nass b darija w l7roof l3arbiya: "
+    "assalamu 3likum, smiti hicham, mrida dyali hamla f chhar rabi3, 3ndi l7riq, sskhana, "
+    "ltanzioun, wja3 rras, ss3la, l7riq f lkarch."
 )
 
 HALLUCINATIONS = [
-    "مرحبا بكم في شاملتي",
-    "مرحبا بكم في",
-    "اشترك في القناة",
-    "لا تنسوا الاشتراك",
-    "لاتنسى الاشتراك",
-    "شكرا على المشاهدة",
-    "تفعيل الجرس",
-    "القناة",
-    "شاملتي",
+    "marhaba bikum f chamliti",
+    "marhaba bikum f",
+    "oshtark f l9ana",
+    "la tansaw loshtirak",
+    "latensa loshtirak",
+    "chokran 3la lmchahada",
+    "taf3il jras",
+    "l9ana",
+    "chamliti",
 ]
 
 
@@ -33,7 +38,7 @@ def _clean_transcription(text: str) -> str:
     for h in HALLUCINATIONS:
         cleaned = cleaned.replace(h, "")
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
-    
+
     normalized = _normalize_text(cleaned)
     prompt_normalized = _normalize_text(DARIJA_PROMPT)
     if normalized == prompt_normalized:
@@ -48,17 +53,16 @@ def _get_model():
     if _model is None:
         with _lock:
             if _model is None:
-                # "small" ou "medium" reduisent drastiquement les hallucinations vs "tiny"
+                logger.info("Loading Whisper model (medium, cpu, int8)...")
                 _model = WhisperModel("medium", device="cpu", compute_type="int8")
+                logger.info("Whisper model loaded.")
     return _model
 
-
-import os
 
 def transcribe_darija(audio_path: str) -> str:
     try:
         if not os.path.exists(audio_path) or os.path.getsize(audio_path) < 800:
-            return "لم يتم التقاط الصوت بوضوح، يرجى إعادة التسجيل والتحدث قرب الميكروفون."
+            return "lam ytm ltqas swt b wdo9, yraj3 3yad ttswir w t7dath qrb lmikrwfn."
 
         model = _get_model()
         segments, info = model.transcribe(
@@ -84,7 +88,7 @@ def transcribe_darija(audio_path: str) -> str:
         text = _clean_transcription(text)
         if text.strip() and len(text.strip()) >= 2:
             return text.strip()
-        return "لم نتمكن من سماع الصوت بوضوح، يرجى التحدث بصوت أعلى وواضح."
+        return "lam nestati3 sm3 swt b wdo9, yraj3 t7dath b swt a3la w b wdo9."
     except Exception as e:
-        print(f"[STT] ERROR: {type(e).__name__}: {e}")
-        return "حدث خطأ في التقاط الصوت، يرجى إعادة التحدث أو كتابة الرسالة."
+        logger.error(f"STT ERROR: {type(e).__name__}: {e}")
+        return "xat2 f ltqas swt, yraj3 tt7dath aw yktb rrsala."
