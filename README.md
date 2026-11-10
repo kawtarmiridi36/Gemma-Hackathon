@@ -115,5 +115,7 @@ Rural Health Copilot aims to:
 Rural Health Copilot is a clinical assistance platform and does not replace qualified healthcare professionals, medical diagnosis, or clinical judgment. All diagnoses, prescriptions, and treatment decisions must be reviewed and validated by authorized healthcare professionals.
 
 ---
+<img width="1620" height="961" alt="Blue Illustrated Medical Center Presentation" src="https://github.com/user-attachments/assets/9ce823e7-019b-4392-a035-737ffcb04f1b" />
+
 
 **Rural Health Copilot — Bringing AI-Assisted Healthcare Closer to Rural Communities.**
